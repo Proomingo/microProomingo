@@ -1,0 +1,157 @@
+<!-- index.html — MicroProomingo-XOR : Reseau a 3 neurones pour la porte OU Exclusif -->
+<!DOCTYPE html>  <!-- Declaration du type de document HTML5 -->
+<html lang="fr">  <!-- Langue du document : Francais -->
+<head>  <!-- Configuration et styles de la page -->
+    <meta charset="UTF-8">  <!-- Encodage UTF-8 -->
+    <title>MicroProomingo — XOR</title>  <!-- Titre de l'onglet -->
+    <style>  <!-- Style CSS integre -->
+        body { font-family: monospace; background: #121212; color: #00ff66; padding: 20px; }  <!-- Theme console -->
+        .card { background: #1e1e1e; border: 1px solid #00ff66; padding: 15px; margin-bottom: 15px; border-radius: 5px; }  <!-- Conteneur -->
+        button { background: #00ff66; color: #121212; border: none; padding: 10px 15px; cursor: pointer; font-weight: bold; margin-right: 10px; }  <!-- Boutons -->
+        button:hover { background: #00cc52; }  <!-- Survol boutons -->
+        #log { white-space: pre-wrap; background: #000000; padding: 10px; border: 1px solid #333333; max-height: 280px; overflow-y: auto; }  <!-- Console log -->
+    </style>  <!-- Fin du CSS -->
+</head>  <!-- Fin du head -->
+<body>  <!-- Corps de la page web -->
+
+    <h1>🧠 MicroProomingo — Problème du XOR</h1>  <!-- Titre principal -->
+    <p>Réseau de 3 neurones (2 en couche cachée + 1 en sortie) apprenant le OU Exclusif.</p>  <!-- Description -->
+
+    <div class="card">  <!-- Bloc des boutons de commande -->
+        <button onclick="entrainerReseau()">1. Lancer l'entraînement XOR</button>  <!-- Entrainement -->
+        <button onclick="reinitialiserMemoire()">2. Effacer la mémoire</button>  <!-- Purge mémoire -->
+    </div>  <!-- Fin du bloc boutons -->
+
+    <div class="card">  <!-- Bloc console -->
+        <h3>Console de suivi :</h3>  <!-- Titre console -->
+        <div id="log">Clique sur "Lancer l'entraînement XOR" pour démarrer...</div>  <!-- Zone de texte -->
+    </div>  <!-- Fin du bloc console -->
+
+    <script>  <!-- Code JavaScript autonome -->
+        // --- 1. DONNEES DU XOR (OU EXCLUSIF) ---
+        const donneesEntree = [[0, 0], [0, 1], [1, 0], [1, 1]];  // Les 4 combinaisons de test
+        const reponsesAttendues = [0, 1, 1, 0];  // Table XOR (Vrai uniquement si les entrees sont differentes)
+        const tauxApprentissage = 0.5;  // Sensibilite des ajustements
+
+        // --- 2. ACTIVATION SIGMOIDE ET DERIVEE ---
+        function sigmoide(x) {  // Fonction d'activation continue
+            return 1 / (1 + Math.exp(-x));  // Courbe logistique entre 0 et 1
+        }  // Fin de la sigmoide
+
+        function deriveeSigmoide(y) {  // Pente necessaire aux gradients
+            return y * (1 - y);  // Derivee calculee a partir de la sortie y
+        }  // Fin de la derivee
+
+        // --- 3. STRUCTURE DES POIDS DU RESEAU A 3 NEURONES ---
+        // N1 et N2 forment la couche cachee, N3 est la sortie
+        let poids = {
+            n1_w1: 0, n1_w2: 0, n1_b: 0,  // Parametres du neurone cache 1
+            n2_w1: 0, n2_w2: 0, n2_b: 0,  // Parametres du neurone cache 2
+            n3_w1: 0, n3_w2: 0, n3_b: 0   // Parametres du neurone de sortie 3 (connecte a N1 et N2)
+        };  // Fin de l'objet poids
+
+        function chargerPoids() {  // Chargement depuis le localStorage ou tirage
+            const sauvegarde = localStorage.getItem("proomingo_xor_poids");  // Cle dediee au XOR
+            if (sauvegarde) {  // Si une memoire XOR existe
+                poids = JSON.parse(sauvegarde);  // Restauration
+                afficherLog("--- MEMOIRE CHARGEE : Reprise des poids enregistrés ---");  // Log
+                return true;  // Memoire trouvee
+            } else {  // Si pas de sauvegarde
+                poids.n1_w1 = Math.random() * 2 - 1;  // Poids 1 de N1
+                poids.n1_w2 = Math.random() * 2 - 1;  // Poids 2 de N1
+                poids.n1_b = Math.random() * 2 - 1;   // Biais de N1
+                poids.n2_w1 = Math.random() * 2 - 1;  // Poids 1 de N2
+                poids.n2_w2 = Math.random() * 2 - 1;  // Poids 2 de N2
+                poids.n2_b = Math.random() * 2 - 1;   // Biais de N2
+                poids.n3_w1 = Math.random() * 2 - 1;  // Liaison N1->N3
+                poids.n3_w2 = Math.random() * 2 - 1;  // Liaison N2->N3
+                poids.n3_b = Math.random() * 2 - 1;   // Biais de N3
+                afficherLog("--- MEMOIRE VIERGE : Tirage de 9 nouveaux poids au hasard ---");  // Log
+                return false;  // Nouveau tirage
+            }  // Fin de condition
+        }  // Fin de chargerPoids
+
+        // --- 4. ENTRAINEMENT PAR RETROPROPAGATION COMPLETE ---
+        function entrainerReseau() {  // Lancement de l'apprentissage
+            document.getElementById("log").innerHTML = "";  // Vidage console
+            chargerPoids();  // Chargement ou tirage hasard
+
+            for (let epoque = 0; epoque < 5000; epoque++) {  // Le XOR necessite plus d'epoques pour converger
+                let erreurTotale = 0;  // Somme des erreurs sur l'epoque
+
+                for (let i = 0; i < donneesEntree.length; i++) {  // Parcours des 4 cas XOR
+                    const x1 = donneesEntree[i][0];  // Entree 1
+                    const x2 = donneesEntree[i][1];  // Entree 2
+                    const cible = reponsesAttendues[i];  // Cible (0 ou 1)
+
+                    // PASSE AVANT (Forward Pass sur 2 couches)
+                    const sN1 = sigmoide((x1 * poids.n1_w1) + (x2 * poids.n1_w2) + poids.n1_b);  // Sortie Neurone Cache 1
+                    const sN2 = sigmoide((x1 * poids.n2_w1) + (x2 * poids.n2_w2) + poids.n2_b);  // Sortie Neurone Cache 2
+                    const sN3 = sigmoide((sN1 * poids.n3_w1) + (sN2 * poids.n3_w2) + poids.n3_b);  // Sortie Neurone Sortie 3
+
+                    // CALCUL DE L'ERREUR
+                    const erreur = cible - sN3;  // Ecart entre cible et prediction de N3
+                    erreurTotale += Math.abs(erreur);  // Cumul erreur
+
+                    // RETROPROPAGATION DES GRADIENTS
+                    const gradN3 = erreur * deriveeSigmoide(sN3);  // Gradient de la couche de sortie N3
+                    const gradN1 = (gradN3 * poids.n3_w1) * deriveeSigmoide(sN1);  // Gradient retropropage a N1
+                    const gradN2 = (gradN3 * poids.n3_w2) * deriveeSigmoide(sN2);  // Gradient retropropage a N2
+
+                    // CORRECTION DES 9 MOLETTES (Ajustement des poids et biais)
+                    poids.n3_w1 += tauxApprentissage * gradN3 * sN1;  // Ajustement liaison N1->N3
+                    poids.n3_w2 += tauxApprentissage * gradN3 * sN2;  // Ajustement liaison N2->N3
+                    poids.n3_b += tauxApprentissage * gradN3;  // Ajustement biais N3
+
+                    poids.n1_w1 += tauxApprentissage * gradN1 * x1;  // Ajustement poids 1 de N1
+                    poids.n1_w2 += tauxApprentissage * gradN1 * x2;  // Ajustement poids 2 de N1
+                    poids.n1_b += tauxApprentissage * gradN1;  // Ajustement biais N1
+
+                    poids.n2_w1 += tauxApprentissage * gradN2 * x1;  // Ajustement poids 1 de N2
+                    poids.n2_w2 += tauxApprentissage * gradN2 * x2;  // Ajustement poids 2 de N2
+                    poids.n2_b += tauxApprentissage * gradN2;  // Ajustement biais N2
+                }  // Fin de la boucle sur les 4 exemples
+
+                if (epoque % 500 === 0 || erreurTotale < 0.05) {  // Suivi tous les 500 pas
+                    afficherLog(`Époque ${epoque + 1} — Erreur globale : ${erreurTotale.toFixed(4)}`);  // Affichage
+                }  // Fin suivi
+
+                if (erreurTotale < 0.05) {  // Seuil de reussite tres precis
+                    afficherLog(`\n Succès en ${epoque + 1} époques ! Le XOR est maîtrisé.`);  // Victoire
+                    break;  // Fin d'apprentissage
+                }  // Fin test reussite
+            }  // Fin boucle epoques
+
+            // SAUVEGARDE ET TEST FINAL
+            localStorage.setItem("proomingo_xor_poids", JSON.stringify(poids));  // Enregistrement localStorage
+            afficherLog("💾 Mémoire du XOR sauvegardée.");  // Validation
+
+            afficherLog("\n--- DECISIONS FINALES DU RESEAU (XOR) ---");  // Titre test
+            for (let i = 0; i < donneesEntree.length; i++) {  // Test des 4 cas
+                const x1 = donneesEntree[i][0];  // Entree 1
+                const x2 = donneesEntree[i][1];  // Entree 2
+                const sN1 = sigmoide((x1 * poids.n1_w1) + (x2 * poids.n1_w2) + poids.n1_b);  // Passe N1
+                const sN2 = sigmoide((x1 * poids.n2_w1) + (x2 * poids.n2_w2) + poids.n2_b);  // Passe N2
+                const sN3 = sigmoide((sN1 * poids.n3_w1) + (sN2 * poids.n3_w2) + poids.n3_b);  // Passe N3
+                const decision = sN3 >= 0.5 ? 1 : 0;  // Arrondi final
+                afficherLog(`Entrées [${x1}, ${x2}] -> Probabilité: ${sN3.toFixed(3)} -> Décision: ${decision} (Attendu: ${reponsesAttendues[i]})`);  // Bilan
+            }  // Fin boucle test
+        }  // Fin de entrainerReseau
+
+        // --- 5. PURGE MEMOIRE ---
+        function reinitialiserMemoire() {  // Effacement de la cle XOR
+            localStorage.removeItem("proomingo_xor_poids");  // Supprime de localStorage
+            document.getElementById("log").innerHTML = "";  // Vide la console
+            afficherLog("Mémoire XOR effacée !");  // Confirmation
+        }  // Fin de reinitialiserMemoire
+
+        // --- 6. AFFICHAGE LOG ---
+        function afficherLog(message) {  // Inserer du texte dans le div log
+            const logDiv = document.getElementById("log");  // Recuperation element DOM
+            logDiv.innerHTML += message + "\n";  // Ajout texte
+            logDiv.scrollTop = logDiv.scrollHeight;  // Scroll bas
+        }  // Fin de afficherLog
+    </script>  <!-- Fin du script JS -->
+
+</body>  <!-- Fin du body -->
+</html>  <!-- Fin du document -->
