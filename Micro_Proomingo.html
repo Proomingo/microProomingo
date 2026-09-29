@@ -1,0 +1,145 @@
+<!-- index.html — Correction de la retropropagation du reseau a 2 neurones (MLP) -->
+<!DOCTYPE html>  <!-- Declaration du type de document HTML5 -->
+<html lang="fr">  <!-- Langue principale du document : Francais -->
+<head>  <!-- En-tete du document pour la configuration et les styles -->
+    <meta charset="UTF-8">  <!-- Encodage UTF-8 pour supporter les accents -->
+    <title>MicroProomingo-1 (Corrigé)</title>  <!-- Titre de l'onglet dans le navigateur -->
+    <style>  <!-- Stylisation CSS minimale de la console de suivi -->
+        body { font-family: monospace; background: #121212; color: #00ff66; padding: 20px; }  <!-- Theme sombre terminal -->
+        .card { background: #1e1e1e; border: 1px solid #00ff66; padding: 15px; margin-bottom: 15px; border-radius: 5px; }  <!-- Cartes de conteneur -->
+        button { background: #00ff66; color: #121212; border: none; padding: 10px 15px; cursor: pointer; font-weight: bold; margin-right: 10px; }  <!-- Boutons d'action -->
+        button:hover { background: #00cc52; }  <!-- Effet visuel au survol du bouton -->
+        #log { white-space: pre-wrap; background: #000000; padding: 10px; border: 1px solid #333333; max-height: 250px; overflow-y: auto; }  <!-- Console scrollable -->
+    </style>  <!-- Fin des styles CSS -->
+</head>  <!-- Fin de l'en-tete -->
+<body>  <!-- Corps de la page HTML -->
+
+    <h1>🧠 MicroProomingo-1 (Correctif Rétropropagation)</h1>  <!-- Titre principal -->
+    <p>Résolution des blocages : utilisation de la fonction Sigmoïde et de gradients continus.</p>  <!-- Description du correctif -->
+
+    <div class="card">  <!-- Zone des commandes utilisateur -->
+        <button onclick="entrainerReseau()">1. Lancer l'entraînement</button>  <!-- Declenchement de la fonction d'apprentissage -->
+        <button onclick="reinitialiserMemoire()">2. Effacer la mémoire</button>  <!-- Purge de la sauvegarde localStorage -->
+    </div>  <!-- Fin de la zone des commandes -->
+
+    <div class="card">  <!-- Zone d'affichage des logs -->
+        <h3>Console de suivi :</h3>  <!-- En-tete du journal -->
+        <div id="log">Clique sur "Lancer l'entraînement" pour démarrer...</div>  <!-- Zone de texte dynamique -->
+    </div>  <!-- Fin de la zone de logs -->
+
+    <script>  <!-- Debut du code JavaScript -->
+        // --- 1. DONNEES D'ENTRAINEMENT (Table ET) ---
+        const donneesEntree = [[0, 0], [0, 1], [1, 0], [1, 1]];  // Les 4 combinaisons de test
+        const reponsesAttendues = [0, 0, 0, 1];  // Resultats exacts cibles
+        const tauxApprentissage = 0.5;  // Taux ajuste pour une convergence rapide avec Sigmoide
+
+        // --- 2. ACTIVATION CONTINUE (SIGMOIDE) ET SA DERIVEE ---
+        function sigmoide(x) {  // Fonction continue reliant doucement 0 a 1 (lisse la decision)
+            return 1 / (1 + Math.exp(-x));  // Formule mathematique de la courbe logistique
+        }  // Fin de la fonction sigmoide
+
+        function deriveeSigmoide(y) {  // Calcul de la pente/gradient necessaire aux corrections
+            return y * (1 - y);  // Formule simplifiee de la derivee a partir de la sortie y
+        }  // Fin de la fonction deriveeSigmoide
+
+        // --- 3. STRUCTURE DES POIDS ET MEMOIRE ---
+        let poids = { n1_w1: 0, n1_w2: 0, n1_b: 0, n2_w1: 0, n2_b: 0 };  // Objet de stockage des 5 poids
+
+        function chargerPoids() {  // Gestion du chargement ou de l'initialisation aleatoire
+            const sauvegarde = localStorage.getItem("proomingo_poids_v2");  // Verification de la cle localStorage
+            if (sauvegarde) {  // Si une sauvegarde existe sur le navigateur
+                poids = JSON.parse(sauvegarde);  // Restauration des poids enregistres
+                afficherLog("--- MEMOIRE CHARGEE : Chargement des poids enregistrés ---");  // Notification
+                return true;  // Retourne vrai si la memoire est trouvee
+            } else {  // Si le stockage est vide
+                poids.n1_w1 = Math.random() * 2 - 1;  // Tirage aleatoire initial pour le poids 1 de N1
+                poids.n1_w2 = Math.random() * 2 - 1;  // Tirage aleatoire initial pour le poids 2 de N1
+                poids.n1_b = Math.random() * 2 - 1;  // Tirage aleatoire initial pour le biais de N1
+                poids.n2_w1 = Math.random() * 2 - 1;  // Tirage aleatoire initial pour le poids N1->N2
+                poids.n2_b = Math.random() * 2 - 1;  // Tirage aleatoire initial pour le biais de N2
+                afficherLog("--- MEMOIRE VIERGE : Tirage de nouveaux poids au hasard ---");  // Notification
+                return false;  // Retourne faux si nouveau tirage
+            }  // Fin de la condition
+        }  // Fin de la fonction chargerPoids
+
+        // --- 4. ENTREINEMENT DU RESEAU ---
+        function entrainerReseau() {  // Declenche par le bouton d'entrainement
+            document.getElementById("log").innerHTML = "";  // Effacement de la console avant execution
+            chargerPoids();  // Recuperation ou generation des poids
+
+            let succes = false;  // Indicateur de reussite pour la boucle
+
+            for (let epoque = 0; epoque < 1000; epoque++) {  // Plage d'epoques augmentee pour garantir la convergence
+                let erreurTotaleEpoque = 0;  // Accumulateur des erreurs absolues
+
+                for (let i = 0; i < donneesEntree.length; i++) {  // Boucle sur les 4 exemples
+                    const x1 = donneesEntree[i][0];  // Premiere valeur d'entree
+                    const x2 = donneesEntree[i][1];  // Deuxieme valeur d'entree
+                    const cible = reponsesAttendues[i];  // Reponse attendue
+
+                    // PASSE AVANT (Forward Pass avec fonction continue)
+                    const sommeN1 = (x1 * poids.n1_w1) + (x2 * poids.n1_w2) + poids.n1_b;  // Note du neurone 1
+                    const sortieN1 = sigmoide(sommeN1);  // Sortie continue entre 0 et 1 pour N1
+
+                    const sommeN2 = (sortieN1 * poids.n2_w1) + poids.n2_b;  // Note du neurone 2 alimentee par N1
+                    const sortieN2 = sigmoide(sommeN2);  // Decision continue du neurone 2
+
+                    // CALCUL DE L'ERREUR CONTINU
+                    const erreur = cible - sortieN2;  // Ecart continu entre la valeur exacte et la prediction
+                    erreurTotaleEpoque += Math.abs(erreur);  // Addition de l'erreur absolue
+
+                    // RETROPROPAGATION AVEC REGLE DU CHAINAGE (Gradient Exact)
+                    const gradientN2 = erreur * deriveeSigmoide(sortieN2);  // Calcul de la correction necessaire sur N2
+                    const gradientN1 = (gradientN2 * poids.n2_w1) * deriveeSigmoide(sortieN1);  // Propagation du gradient vers N1
+
+                    // AJUSTEMENT PRECISION DES MOLETTES (Ajustement continu)
+                    poids.n2_w1 += tauxApprentissage * gradientN2 * sortieN1;  // Ajustement du poids de liaison N1->N2
+                    poids.n2_b += tauxApprentissage * gradientN2;  // Ajustement du biais de N2
+                    poids.n1_w1 += tauxApprentissage * gradientN1 * x1;  // Ajustement du poids 1 de N1
+                    poids.n1_w2 += tauxApprentissage * gradientN1 * x2;  // Ajustement du poids 2 de N1
+                    poids.n1_b += tauxApprentissage * gradientN1;  // Ajustement du biais de N1
+                }  // Fin de la boucle sur les 4 cas
+
+                if (epoque % 100 === 0 || erreurTotaleEpoque < 0.1) {  // Affichage periodique pour eviter de bloquer l'ecran
+                    afficherLog(`Époque ${epoque + 1} — Erreur globale : ${erreurTotaleEpoque.toFixed(4)}`);  // Impression du suivi
+                }  // Fin du bloc d'affichage
+
+                if (erreurTotaleEpoque < 0.1) {  // Seuil de reussite ou le reseau est juge parfaitement entraine
+                    afficherLog(`\n Succès en ${epoque + 1} époques ! Le réseau a convergé.`);  // Notification de reussite
+                    succes = true;  // Validation de la reussite
+                    break;  // Sortie immediate de la boucle
+                }  // Fin de validation
+            }  // Fin de la boucle des epoques
+
+            // SAUVEGARDE ET TEST FINAL
+            localStorage.setItem("proomingo_poids_v2", JSON.stringify(poids));  // Sauvegarde des poids corriges
+            afficherLog("💾 Mémoire sauvegardée dans le navigateur.");  // Confirmation de sauvegarde
+
+            afficherLog("\n--- DECISIONS FINALES DU RESEAU ---");  // En-tete de la verification
+            for (let i = 0; i < donneesEntree.length; i++) {  // Verification sur les 4 cas
+                const x1 = donneesEntree[i][0];  // Entree 1
+                const x2 = donneesEntree[i][1];  // Entree 2
+                const s1 = sigmoide((x1 * poids.n1_w1) + (x2 * poids.n1_w2) + poids.n1_b);  // Passe N1
+                const s2 = sigmoide((s1 * poids.n2_w1) + poids.n2_b);  // Passe N2
+                const decisionArrondie = s2 >= 0.5 ? 1 : 0;  // Tranchage de la decision continue en 0 ou 1
+                afficherLog(`Entrées [${x1}, ${x2}] -> Probabilité: ${s2.toFixed(3)} -> Décision: ${decisionArrondie} (Attendu: ${reponsesAttendues[i]})`);  // Résultat
+            }  // Fin de la boucle de verification
+        }  // Fin de la fonction entrainerReseau
+
+        // --- 5. PURGE DE LA MEMOIRE ---
+        function reinitialiserMemoire() {  // Fonction pour reinitialiser totalement l'experience
+            localStorage.removeItem("proomingo_poids_v2");  // Effacement de la cle de stockage v2
+            document.getElementById("log").innerHTML = "";  // Vidage de la console HTML
+            afficherLog("Mémoire effacée ! Un nouveau tirage aléatoire sera effectué au prochain entraînement.");  // Confirmation
+        }  // Fin de la fonction reinitialiserMemoire
+
+        // --- 6. UTILITAIRE D'AFFICHAGE EN CONSOLE ---
+        function afficherLog(message) {  // Ajout de texte dans la zone de log HTML
+            const logDiv = document.getElementById("log");  // Recuperation du composant DOM
+            logDiv.innerHTML += message + "\n";  // Ajout du message avec retour a la ligne
+            logDiv.scrollTop = logDiv.scrollHeight;  // Defilement automatique vers le bas
+        }  // Fin de la fonction afficherLog
+    </script>  <!-- Fin du script JavaScript -->
+
+</body>  <!-- Fin du corps HTML -->
+</html>  <!-- Fin du document HTML -->
